@@ -1,11 +1,32 @@
 import { StyleSheet, View, Pressable, ScrollView } from "react-native";
-import { Button, Modal, TextInput, useTheme, Text, Portal, Dialog, SegmentedButtons } from "react-native-paper";
+import {
+  Button,
+  Modal,
+  TextInput,
+  useTheme,
+  Text,
+  Portal,
+  Dialog,
+  SegmentedButtons,
+} from "react-native-paper";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { useUnits } from "@/lib/unit-context";
 import { DATABASE_ID, databases, MEASUREMENTS_TABLE_ID } from "@/lib/appwrite";
 import { ID, Permission, Role } from "react-native-appwrite";
 
-const TYPES = ["Weight", "Height", "Neck", "Chest", "Biceps", "Waist", "Hips", "Thigh", "Calf", "BodyFat"];
+const TYPES = [
+  "Weight",
+  "Height",
+  "Neck",
+  "Chest",
+  "Biceps",
+  "Waist",
+  "Hips",
+  "Thigh",
+  "Calf",
+  "BodyFat",
+];
 
 type Types = (typeof TYPES)[number];
 
@@ -31,23 +52,30 @@ interface AddMeasurementModalProps {
   onMeasurementAdded?: () => void;
 }
 
-export default function AddMeasurementModal({ visible, onDismiss, onMeasurementAdded }: AddMeasurementModalProps) {
-  const [title, setTitle] = useState<string>('');
-  const [description, setDescription] = useState<string>('');
+export default function AddMeasurementModal({
+  visible,
+  onDismiss,
+  onMeasurementAdded,
+}: AddMeasurementModalProps) {
+  const [title, setTitle] = useState<string>("");
+  const [description, setDescription] = useState<string>("");
   const [type, setType] = useState<Types>(TYPES[0]);
-  const [valueDisplay, setValueDisplay] = useState<string>('');
+  const [valueDisplay, setValueDisplay] = useState<string>("");
   const [value, setValue] = useState<number | null>(null);
-  const [feetDisplay, setFeetDisplay] = useState<string>('');
-  const [inchesDisplay, setInchesDisplay] = useState<string>('');
-  const [unitSystem, setUnitSystem] = useState<UnitSystem>("european");
+  const [feetDisplay, setFeetDisplay] = useState<string>("");
+  const [inchesDisplay, setInchesDisplay] = useState<string>("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [typeMenuVisible, setTypeMenuVisible] = useState(false);
   const { user } = useAuth();
+  const { useMetricUnits } = useUnits();
   const theme = useTheme();
 
   const currentUnits = UNIT_MAP[type];
-  const selectedUnit = unitSystem === "european" ? currentUnits.european : currentUnits.american;
+  const selectedUnit = useMetricUnits
+    ? currentUnits.european
+    : currentUnits.american;
+  const unitSystem: UnitSystem = useMetricUnits ? "european" : "american";
 
   const handleSubmit = async () => {
     if (!user) return;
@@ -72,13 +100,12 @@ export default function AddMeasurementModal({ visible, onDismiss, onMeasurementA
 
       console.log("Created document:", doc);
       // Reset form
-      setTitle('');
-      setValueDisplay('');
+      setTitle("");
+      setValueDisplay("");
       setValue(null);
-      setFeetDisplay('');
-      setInchesDisplay('');
+      setFeetDisplay("");
+      setInchesDisplay("");
       setType(TYPES[0]);
-      setUnitSystem("european");
       setError(null);
       onMeasurementAdded?.();
       onDismiss();
@@ -100,188 +127,252 @@ export default function AddMeasurementModal({ visible, onDismiss, onMeasurementA
 
   const handleClose = () => {
     // Reset form when closing
-    setTitle('');
-    setValueDisplay('');
+    setTitle("");
+    setValueDisplay("");
     setValue(null);
-    setFeetDisplay('');
-    setInchesDisplay('');
+    setFeetDisplay("");
+    setInchesDisplay("");
     setType(TYPES[0]);
-    setUnitSystem("european");
     setError(null);
     onDismiss();
   };
 
   return (
-    <Modal visible={visible} onDismiss={handleClose} contentContainerStyle={styles.modal}>
-      <View style={styles.content}>
-        <Text variant="headlineSmall" style={styles.title}>Add Measurement</Text>
-
-        <Pressable 
-          onPress={() => setTypeMenuVisible(true)}
-          style={styles.typeSelector}
+    <Portal>
+      <Modal
+        visible={visible}
+        onDismiss={handleClose}
+        contentContainerStyle={[
+          styles.modal,
+          { backgroundColor: theme.colors.surface },
+        ]}
+      >
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          <Text style={styles.typeSelectorLabel}>Type: <Text style={styles.typeSelectorValue}>{type}</Text></Text>
-        </Pressable>
+          <View style={styles.content}>
+            <Text variant="headlineSmall" style={styles.title}>
+              Add Measurement
+            </Text>
 
-        <Portal>
-          <Dialog visible={typeMenuVisible} onDismiss={() => setTypeMenuVisible(false)}>
-            <Dialog.Title>Select Type</Dialog.Title>
-            <Dialog.Content>
-              <ScrollView style={styles.typeList}>
-                {TYPES.map((t) => (
-                  <Pressable
-                    key={t}
-                    onPress={() => {
-                      setType(t as Types);
-                      setTypeMenuVisible(false);
-                    }}
-                    style={styles.typeItem}
-                  >
-                    <Text style={type === t ? styles.typeItemSelected : styles.typeItemText}>
-                      {t}
-                    </Text>
-                  </Pressable>
-                ))}
-              </ScrollView>
-            </Dialog.Content>
-          </Dialog>
-        </Portal>
-
-        {type === "Height" && unitSystem === "american" ? (
-          <View style={{ flexDirection: "row", gap: 8, alignItems: "center" }}>
-            <TextInput
-              label="Feet"
-              mode="outlined"
-              onChangeText={(text) => {
-                // allow only digits
-                const cleaned = text.replace(/[^0-9]/g, '');
-                setFeetDisplay(cleaned);
-                const feetNum = cleaned ? parseInt(cleaned, 10) : 0;
-                const inchesNum = inchesDisplay ? parseInt(inchesDisplay || '0', 10) : 0;
-                const totalFeet = feetNum + (inchesNum / 12);
-                setValue(totalFeet > 0 ? parseFloat(totalFeet.toFixed(3)) : null);
-              }}
-              value={feetDisplay}
-              keyboardType="numeric"
-              placeholder="5"
-              style={[styles.input, { flex: 1 }]}
-              editable={!loading}
-            />
-            <TextInput
-              label="Inches"
-              mode="outlined"
-              onChangeText={(text) => {
-                // allow only digits and cap at 11
-                const cleaned = text.replace(/[^0-9]/g, '');
-                let num = cleaned ? parseInt(cleaned, 10) : 0;
-                if (num > 11) num = 11;
-                const display = num === 0 ? (cleaned === '' ? '' : '0') : String(num);
-                setInchesDisplay(display);
-                const feetNum = feetDisplay ? parseInt(feetDisplay || '0', 10) : 0;
-                const inchesNum = num;
-                const totalFeet = feetNum + (inchesNum / 12);
-                setValue(totalFeet > 0 ? parseFloat(totalFeet.toFixed(3)) : null);
-              }}
-              value={inchesDisplay}
-              keyboardType="numeric"
-              placeholder="7"
-              style={[styles.input, { width: 100 }]}
-              editable={!loading}
-            />
-          </View>
-        ) : (
-          <TextInput
-            label="Value"
-            mode="outlined"
-            onChangeText={(text) => {
-              // Convert comma to dot for decimal separator
-              let normalized = text.replace(',', '.');
-              // Remove any non-numeric characters except decimal point
-              const cleaned = normalized.replace(/[^0-9.]/g, '');
-
-              // Check if there's a decimal point
-              const decimalIndex = cleaned.indexOf('.');
-              let filtered = cleaned;
-
-              if (decimalIndex !== -1) {
-                // Split at first decimal point only
-                const intPart = cleaned.substring(0, decimalIndex);
-                const decPart = cleaned.substring(decimalIndex + 1);
-                // Limit decimal part to 2 digits max
-                const limitedDecPart = decPart.slice(0, 2);
-                filtered = intPart + '.' + limitedDecPart;
-              }
-
-              setValueDisplay(filtered);
-              setValue(filtered && !filtered.endsWith('.') ? parseFloat(filtered) : null);
-            }}
-            value={valueDisplay}
-            keyboardType="numbers-and-punctuation"
-            placeholder="Enter measurement value (e.g., 150.5)"
-            style={styles.input}
-            editable={!loading}
-          />
-        )}
-
-        {type !== "BodyFat" ? (
-          <View style={styles.unitContainer}>
-            <Text style={styles.unitLabel}>Unit System</Text>
-            <SegmentedButtons
-              value={unitSystem}
-              onValueChange={(value) => setUnitSystem(value as UnitSystem)}
-              buttons={[
+            <Pressable
+              onPress={() => setTypeMenuVisible(true)}
+              style={[
+                styles.typeSelector,
                 {
-                  value: "european",
-                  label: `European (${currentUnits.european})`,
-                },
-                {
-                  value: "american",
-                  label: `American (${currentUnits.american})`,
+                  borderColor: theme.colors.outline,
+                  backgroundColor: theme.colors.surfaceVariant,
                 },
               ]}
-              style={styles.segmentedButtons}
-            />
-          </View>
-        ) : (
-          <View style={styles.unitContainer}>
-            <Text style={styles.unitLabel}>Unit</Text>
-            <Text variant="headlineSmall" style={{ marginTop: 8, fontWeight: "600", fontSize: 24 }}>%</Text>
-          </View>
-        )}
+            >
+              <Text
+                style={[
+                  styles.typeSelectorLabel,
+                  { color: theme.colors.onSurfaceVariant },
+                ]}
+              >
+                Type:{" "}
+                <Text
+                  style={[
+                    styles.typeSelectorValue,
+                    { color: theme.colors.onSurface },
+                  ]}
+                >
+                  {type}
+                </Text>
+              </Text>
+            </Pressable>
 
-        {error && <Text style={{ color: theme.colors.error, marginBottom: 16 }}>{error}</Text>}
+            <Portal>
+              <Dialog
+                visible={typeMenuVisible}
+                onDismiss={() => setTypeMenuVisible(false)}
+              >
+                <Dialog.Title>Select Type</Dialog.Title>
+                <Dialog.Content>
+                  <ScrollView style={styles.typeList}>
+                    {TYPES.map((t) => (
+                      <Pressable
+                        key={t}
+                        onPress={() => {
+                          setType(t as Types);
+                          setTypeMenuVisible(false);
+                        }}
+                        style={[
+                          styles.typeItem,
+                          { borderBottomColor: theme.colors.outlineVariant },
+                        ]}
+                      >
+                        <Text
+                          style={
+                            type === t
+                              ? [
+                                  styles.typeItemSelected,
+                                  { color: theme.colors.primary },
+                                ]
+                              : [
+                                  styles.typeItemText,
+                                  { color: theme.colors.onSurface },
+                                ]
+                          }
+                        >
+                          {t}
+                        </Text>
+                      </Pressable>
+                    ))}
+                  </ScrollView>
+                </Dialog.Content>
+              </Dialog>
+            </Portal>
 
-        <View style={styles.buttonContainer}>
-          <Button
-            mode="contained"
-            onPress={handleSubmit}
-            disabled={value === null || loading}
-            style={styles.button}
-            loading={loading}
-          >
-            Add Measurement
-          </Button>
-          <Button
-            mode="outlined"
-            onPress={handleClose}
-            disabled={loading}
-            style={styles.button}
-          >
-            Cancel
-          </Button>
-        </View>
-      </View>
-    </Modal>
+            {type === "Height" && unitSystem === "american" ? (
+              <View
+                style={{ flexDirection: "row", gap: 8, alignItems: "center" }}
+              >
+                <TextInput
+                  label="Height (ft)"
+                  mode="outlined"
+                  onChangeText={(text) => {
+                    // allow only digits
+                    const cleaned = text.replace(/[^0-9]/g, "");
+                    setFeetDisplay(cleaned);
+                    const feetNum = cleaned ? parseInt(cleaned, 10) : 0;
+                    const inchesNum = inchesDisplay
+                      ? parseInt(inchesDisplay || "0", 10)
+                      : 0;
+                    const totalFeet = feetNum + inchesNum / 12;
+                    setValue(
+                      totalFeet > 0 ? parseFloat(totalFeet.toFixed(3)) : null
+                    );
+                  }}
+                  value={feetDisplay}
+                  keyboardType="numeric"
+                  placeholder="5"
+                  style={[styles.input, { flex: 1 }]}
+                  editable={!loading}
+                  textColor={theme.colors.onSurface}
+                  outlineColor={theme.colors.outline}
+                  activeOutlineColor={theme.colors.primary}
+                  placeholderTextColor={theme.colors.onSurfaceDisabled}
+                />
+                <TextInput
+                  label="Height (in)"
+                  mode="outlined"
+                  onChangeText={(text) => {
+                    // allow only digits and cap at 11
+                    const cleaned = text.replace(/[^0-9]/g, "");
+                    let num = cleaned ? parseInt(cleaned, 10) : 0;
+                    if (num > 11) num = 11;
+                    const display =
+                      num === 0 ? (cleaned === "" ? "" : "0") : String(num);
+                    setInchesDisplay(display);
+                    const feetNum = feetDisplay
+                      ? parseInt(feetDisplay || "0", 10)
+                      : 0;
+                    const inchesNum = num;
+                    const totalFeet = feetNum + inchesNum / 12;
+                    setValue(
+                      totalFeet > 0 ? parseFloat(totalFeet.toFixed(3)) : null
+                    );
+                  }}
+                  value={inchesDisplay}
+                  keyboardType="numeric"
+                  placeholder="7"
+                  style={[styles.input, { width: 100 }]}
+                  editable={!loading}
+                  textColor={theme.colors.onSurface}
+                  outlineColor={theme.colors.outline}
+                  activeOutlineColor={theme.colors.primary}
+                  placeholderTextColor={theme.colors.onSurfaceDisabled}
+                />
+              </View>
+            ) : (
+              <TextInput
+                label={`${type} (${selectedUnit})`}
+                mode="outlined"
+                onChangeText={(text) => {
+                  // Convert comma to dot for decimal separator
+                  let normalized = text.replace(",", ".");
+                  // Remove any non-numeric characters except decimal point
+                  const cleaned = normalized.replace(/[^0-9.]/g, "");
+
+                  // Check if there's a decimal point
+                  const decimalIndex = cleaned.indexOf(".");
+                  let filtered = cleaned;
+
+                  if (decimalIndex !== -1) {
+                    // Split at first decimal point only
+                    const intPart = cleaned.substring(0, decimalIndex);
+                    const decPart = cleaned.substring(decimalIndex + 1);
+                    // Limit decimal part to 2 digits max
+                    const limitedDecPart = decPart.slice(0, 2);
+                    filtered = intPart + "." + limitedDecPart;
+                  }
+
+                  setValueDisplay(filtered);
+                  setValue(
+                    filtered && !filtered.endsWith(".")
+                      ? parseFloat(filtered)
+                      : null
+                  );
+                }}
+                value={valueDisplay}
+                keyboardType="numbers-and-punctuation"
+                placeholder="Enter measurement value (e.g., 150.5)"
+                style={styles.input}
+                editable={!loading}
+                textColor={theme.colors.onSurface}
+                outlineColor={theme.colors.outline}
+                activeOutlineColor={theme.colors.primary}
+                placeholderTextColor={theme.colors.onSurfaceDisabled}
+              />
+            )}
+
+            {error && (
+              <Text style={{ color: theme.colors.error, marginBottom: 16 }}>
+                {error}
+              </Text>
+            )}
+
+            <View style={styles.buttonContainer}>
+              <Button
+                mode="contained"
+                onPress={handleSubmit}
+                disabled={value === null || loading}
+                style={styles.button}
+                loading={loading}
+              >
+                Add Measurement
+              </Button>
+              <Button
+                mode="outlined"
+                onPress={handleClose}
+                disabled={loading}
+                style={styles.button}
+              >
+                Cancel
+              </Button>
+            </View>
+          </View>
+        </ScrollView>
+      </Modal>
+    </Portal>
   );
 }
 
 const styles = StyleSheet.create({
   modal: {
-    backgroundColor: "#1e1e1e",
-    margin: 16,
-    marginTop: 80,
-    borderRadius: 8,
-    padding: 16,
+    margin: 20,
+    marginHorizontal: 20,
+    maxHeight: "85%",
+    borderRadius: 12,
+    padding: 20,
+    alignSelf: "center",
+    width: "90%",
+  },
+  scrollContent: {
+    flexGrow: 1,
   },
   content: {
     gap: 16,
@@ -298,7 +389,6 @@ const styles = StyleSheet.create({
   },
   unitLabel: {
     fontSize: 12,
-    color: "#888888",
     fontWeight: "500",
   },
   segmentedButtons: {
@@ -307,17 +397,13 @@ const styles = StyleSheet.create({
   },
   typeSelector: {
     borderWidth: 1,
-    borderColor: "#424242",
     borderRadius: 4,
     padding: 12,
-    backgroundColor: "#2c2c2c",
   },
   typeSelectorLabel: {
     fontSize: 14,
-    color: "#888888",
   },
   typeSelectorValue: {
-    color: "#FFFFFF",
     fontWeight: "600",
   },
   typeList: {
@@ -327,15 +413,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 8,
     borderBottomWidth: 1,
-    borderBottomColor: "#333333",
   },
   typeItemText: {
     fontSize: 14,
-    color: "#FFFFFF",
   },
   typeItemSelected: {
     fontSize: 14,
-    color: "#2196F3",
     fontWeight: "600",
   },
   buttonContainer: {

@@ -1,59 +1,61 @@
-import React, { useMemo, useState } from "react";
-import { View, StyleSheet, Dimensions, Platform, useWindowDimensions } from "react-native";
-import { Text, SegmentedButtons, useTheme } from "react-native-paper";
-import { LineChart } from "react-native-chart-kit";
+import React, { useMemo } from "react";
+import { View, StyleSheet, useWindowDimensions, Pressable } from "react-native";
+import { Text, useTheme } from "react-native-paper";
+import { LineChart, Grid, YAxis, XAxis } from "react-native-svg-charts";
+import { Text as SvgText } from "react-native-svg";
 import { Measurement } from "@/types/database.type";
-
-// Suppress known web SVG warnings from react-native-chart-kit
-if (Platform.OS === "web") {
-  const originalError = console.error;
-  console.error = (...args: any[]) => {
-    if (
-      typeof args[0] === "string" &&
-      (args[0].includes("transform-origin") ||
-        args[0].includes("onStartShouldSetResponder") ||
-        args[0].includes("onResponderTerminationRequest") ||
-        args[0].includes("onResponderGrant") ||
-        args[0].includes("onResponderMove") ||
-        args[0].includes("onResponderRelease") ||
-        args[0].includes("onResponderTerminate") ||
-        args[0].includes("onPress"))
-    ) {
-      return;
-    }
-    originalError(...args);
-  };
-}
+import { useUnits } from "@/lib/unit-context";
 
 type Props = {
   measurements: Measurement[];
   type: string;
+  onPress?: () => void;
 };
 
-function kgToLbs(v: number) { return v * 2.2046226218; }
-function lbsToKg(v: number) { return v / 2.2046226218; }
-function cmToIn(v: number) { return v * 0.3937007874; }
-function inToCm(v: number) { return v / 0.3937007874; }
-function cmToFt(v: number) { return v / 30.48; }
-function ftToCm(v: number) { return v * 30.48; }
-function inToFt(v: number) { return v / 12; }
-function ftToIn(v: number) { return v * 12; }
+function kgToLbs(v: number) {
+  return v * 2.2046226218;
+}
+function lbsToKg(v: number) {
+  return v / 2.2046226218;
+}
+function cmToIn(v: number) {
+  return v * 0.3937007874;
+}
+function inToCm(v: number) {
+  return v / 0.3937007874;
+}
+function cmToFt(v: number) {
+  return v / 30.48;
+}
+function ftToCm(v: number) {
+  return v * 30.48;
+}
+function inToFt(v: number) {
+  return v / 12;
+}
+function ftToIn(v: number) {
+  return v * 12;
+}
 
-export default function MeasurementChart({ measurements, type }: Props) {
+export default function MeasurementChart({
+  measurements,
+  type,
+  onPress,
+}: Props) {
   const theme = useTheme();
-  const [unitSystem, setUnitSystem] = useState<"european" | "american">("european");
+  const { useMetricUnits } = useUnits();
   const windowDimensions = useWindowDimensions();
-  
-  // Calculate responsive dimensions
-  const chartWidth = Math.min(windowDimensions.width - 32, 800);
+
   const chartHeight = windowDimensions.width > 900 ? 280 : 220;
 
   // Filter measurements for this type and sort by date
   const dataPoints = useMemo(() => {
     const list = measurements
-      .filter(m => m.type === type)
-      .map(m => ({
-        date: new Date((m as any)["$createdAt"] || m.$createdAt || m.$updatedAt),
+      .filter((m) => m.type === type)
+      .map((m) => ({
+        date: new Date(
+          (m as any)["$createdAt"] || m.$createdAt || m.$updatedAt
+        ),
         value: m.value,
         unit: m.unit,
       }))
@@ -63,92 +65,26 @@ export default function MeasurementChart({ measurements, type }: Props) {
 
   if (!dataPoints.length) return null;
 
-  // compute target unit and button labels
   const getUnitInfo = () => {
     const sampleUnit = dataPoints[0].unit || "";
-    if (type === "Weight") return { metric: "kg", imperial: "lbs", needsSelector: true };
-    if (type === "Height") return { metric: "cm", imperial: "ft", needsSelector: true };
-    // body parts use length
-    const lengthTypes = ["Neck","Chest","Biceps","Waist","Hips","Thigh","Calf"];
-    if (lengthTypes.includes(type)) return { metric: "cm", imperial: "in", needsSelector: true };
-    if (type === "BodyFat") return { metric: "%", imperial: "%", needsSelector: false };
-    return { metric: sampleUnit, imperial: sampleUnit, needsSelector: true };
+    if (type === "Weight") return { metric: "kg", imperial: "lbs" };
+    if (type === "Height") return { metric: "cm", imperial: "ft" };
+    const lengthTypes = [
+      "Neck",
+      "Chest",
+      "Biceps",
+      "Waist",
+      "Hips",
+      "Thigh",
+      "Calf",
+    ];
+    if (lengthTypes.includes(type)) return { metric: "cm", imperial: "in" };
+    if (type === "BodyFat") return { metric: "%", imperial: "%" };
+    return { metric: sampleUnit, imperial: sampleUnit };
   };
 
   const unitInfo = getUnitInfo();
-  const targetUnit = unitSystem === "european" ? unitInfo.metric : unitInfo.imperial;
-
-  // Prepare data with time-proportional spacing using interpolation
-  const { chartData, labels } = useMemo(() => {
-    if (dataPoints.length === 0) return { chartData: { labels: [], datasets: [{ data: [] }] }, labels: [] };
-    if (dataPoints.length === 1) {
-      const converted = convertValue(dataPoints[0].value, dataPoints[0].unit, targetUnit);
-      return {
-        chartData: { labels: [formatDateLabel(dataPoints[0].date)], datasets: [{ data: [converted] }] },
-        labels: [formatDateLabel(dataPoints[0].date)]
-      };
-    }
-
-    // Convert values
-    const convertedPoints = dataPoints.map(p => ({
-      date: p.date,
-      value: convertValue(p.value, p.unit, targetUnit),
-      timestamp: p.date.getTime()
-    }));
-
-    // Calculate time span and create proportional points
-    const minTime = convertedPoints[0].timestamp;
-    const maxTime = convertedPoints[convertedPoints.length - 1].timestamp;
-    const timeRange = maxTime - minTime;
-    
-    // Target number of display points (more for better proportionality)
-    const targetPoints = Math.max(dataPoints.length * 3, 20);
-    const timeStep = timeRange / (targetPoints - 1);
-    
-    const interpolatedData: number[] = [];
-    const interpolatedLabels: string[] = [];
-    
-    for (let i = 0; i < targetPoints; i++) {
-      const currentTime = minTime + (i * timeStep);
-      
-      // Find surrounding real data points
-      let beforeIdx = 0;
-      let afterIdx = convertedPoints.length - 1;
-      
-      for (let j = 0; j < convertedPoints.length - 1; j++) {
-        if (convertedPoints[j].timestamp <= currentTime && convertedPoints[j + 1].timestamp >= currentTime) {
-          beforeIdx = j;
-          afterIdx = j + 1;
-          break;
-        }
-      }
-      
-      // Linear interpolation
-      const before = convertedPoints[beforeIdx];
-      const after = convertedPoints[afterIdx];
-      const timeDiff = after.timestamp - before.timestamp;
-      const ratio = timeDiff === 0 ? 0 : (currentTime - before.timestamp) / timeDiff;
-      const interpolatedValue = before.value + (after.value - before.value) * ratio;
-      
-      interpolatedData.push(parseFloat(interpolatedValue.toFixed(2)));
-      
-      // Show labels only at real data points
-      let label = "";
-      const tolerance = timeStep / 2;
-      for (const point of convertedPoints) {
-        if (Math.abs(point.timestamp - currentTime) < tolerance) {
-          label = formatDateLabel(point.date);
-          break;
-        }
-      }
-      interpolatedLabels.push(label);
-    }
-    
-    return {
-      chartData: { labels: interpolatedLabels, datasets: [{ data: interpolatedData }] },
-      labels: interpolatedLabels
-    };
-  }, [dataPoints, targetUnit]);
+  const targetUnit = useMetricUnits ? unitInfo.metric : unitInfo.imperial;
 
   // Helper to convert values
   function convertValue(v: number, fromUnit: string, toUnit: string): number {
@@ -164,82 +100,183 @@ export default function MeasurementChart({ measurements, type }: Props) {
     return v;
   }
 
-  // Format date labels
-  function formatDateLabel(date: Date): string {
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    return `${day}.${month}`;
-  }
+  // Prepare chart data with time-based positioning
+  const { chartData, xAxisData, yValues, minY, maxY } = useMemo(() => {
+    // Convert values to target unit
+    const convertedPoints = dataPoints.map((p) => ({
+      date: p.date,
+      value: convertValue(p.value, p.unit, targetUnit),
+      timestamp: p.date.getTime(),
+    }));
 
-  // Format Y axis labels for feet+inches if applicable
-  function formatYLabel(value: string): string {
-    const v = parseFloat(value);
-    if (Number.isNaN(v)) return value;
+    const minTime = convertedPoints[0].timestamp;
+    const maxTime = convertedPoints[convertedPoints.length - 1].timestamp;
+    const timeRange = maxTime - minTime;
+
+    // Map each data point to a position from 0 to 1 based on time
+    const data = convertedPoints.map((p) => ({
+      x: timeRange === 0 ? 0 : (p.timestamp - minTime) / timeRange,
+      y: p.value,
+      date: p.date,
+    }));
+
+    // Create evenly spaced X-axis labels (not tied to data points)
+    const numLabels = 5;
+    const xAxis = Array.from({ length: numLabels }, (_, i) => {
+      const position = i / (numLabels - 1); // 0 to 1
+      const timestamp = minTime + position * timeRange;
+      const date = new Date(timestamp);
+      const day = String(date.getDate()).padStart(2, "0");
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+
+      return {
+        x: position,
+        label: `${day}.${month}`,
+      };
+    });
+
+    // Get unique Y values for grid
+    const uniqueYValues = Array.from(new Set(data.map((d) => d.y))).sort(
+      (a, b) => a - b
+    );
+
+    // Calculate min and max for consistent scaling
+    const minY = Math.min(...data.map((d) => d.y));
+    const maxY = Math.max(...data.map((d) => d.y));
+
+    return {
+      chartData: data,
+      xAxisData: xAxis,
+      yValues: uniqueYValues,
+      minY,
+      maxY,
+    };
+  }, [dataPoints, targetUnit]);
+
+  // Format Y axis label
+  function formatYLabel(value: number): string {
     if (type === "Height" && targetUnit === "ft") {
-      const feet = Math.floor(v);
-      let inches = Math.round((v - feet) * 12);
+      const feet = Math.floor(value);
+      let inches = Math.round((value - feet) * 12);
       if (inches === 12) return `${feet + 1}'0\"`;
       return `${feet}'${inches}\"`;
     }
-    return value;
+    return value.toFixed(2);
   }
 
-  return (
-    <View style={[styles.container, { backgroundColor: theme.colors.surface, padding: 12, borderRadius: 12, overflow: "hidden" }] }>
-      <View style={styles.headerRow}>
-        <Text variant="titleSmall" style={{fontSize: 24, margin: 8, padding: 8}}>{type}</Text>
-        {unitInfo.needsSelector ? (
-          <SegmentedButtons
-            value={unitSystem}
-            onValueChange={(v) => setUnitSystem(v as any)}
-            buttons={[
-              { value: "european", label: unitInfo.metric },
-              { value: "american", label: unitInfo.imperial },
-            ]}
-            style={styles.segment}
-          />
-        ) : (
-          <Text variant="headlineSmall" style={{ marginRight: 16, fontWeight: "600", fontSize: 24 }}>%</Text>
-        )}
-      </View>
+  // Check if high contrast mode
+  const isHighContrast =
+    theme.colors.primary === "#ffffff" || theme.colors.primary === "#FFFFFF";
+  const lineColor = isHighContrast ? "#ffffff" : theme.colors.primary;
 
-      <View style={{ position: "relative", borderRadius: 8, overflow: "hidden" }}>
-        <LineChart
-          data={chartData}
-          width={chartWidth}
-          height={chartHeight}
-          formatYLabel={formatYLabel}
-          chartConfig={{
-            backgroundGradientFrom: theme.colors.surface,
-            backgroundGradientTo: theme.colors.surface,
-            backgroundGradientFromOpacity: 0,
-            backgroundGradientToOpacity: 0,
-            fillShadowGradient: "transparent",
-            fillShadowGradientOpacity: 0,
-            color: (opacity = 1) => `rgba(33,150,243, ${opacity})`,
-            labelColor: (opacity = 1) => `rgba(255,255,255, ${opacity})`,
-            decimalPlaces: 2,
-            propsForDots: {
-              r: "0", // Hide all dots since we have interpolated points
-            },
-            propsForBackgroundLines: {
-              stroke: "rgba(255,255,255,0.06)",
-            },
+  return (
+    <Pressable onPress={onPress}>
+      <View
+        style={[
+          styles.container,
+          {
+            backgroundColor: theme.colors.surface,
+            padding: 16,
+            borderRadius: 12,
+          },
+        ]}
+      >
+        <View style={styles.headerRow}>
+          <Text variant="titleSmall" style={{ fontSize: 24, margin: 8 }}>
+            {type}
+          </Text>
+          <Text
+            variant="bodyLarge"
+            style={{
+              marginRight: 16,
+              fontWeight: "600",
+              fontSize: 18,
+              color: theme.colors.onSurface,
+            }}
+          >
+            {targetUnit}
+          </Text>
+        </View>
+
+        <View
+          style={{
+            height: chartHeight,
+            flexDirection: "row",
+            paddingVertical: 20,
           }}
-          bezier
-          style={{ borderRadius: 8, backgroundColor: "transparent", marginBottom: 20 }}
-          withDots={false}
-        />
-        <View style={{ position: "absolute", bottom: 0, left: 4, paddingHorizontal: 6, paddingVertical: 3, backgroundColor: "rgba(42,42,42,0.9)", borderRadius: 4 }}>
-          <Text variant="labelSmall" style={{ color: "rgba(255,255,255,0.7)", fontSize: 10 }}>Date</Text>
+        >
+          {/* Y Axis */}
+          <YAxis
+            data={yValues}
+            contentInset={{ top: 20, bottom: 20 }}
+            svg={{
+              fill: theme.colors.onSurface,
+              fontSize: 10,
+            }}
+            min={minY}
+            max={maxY}
+            numberOfTicks={yValues.length}
+            formatLabel={(value: any) => {
+              const matchesDataValue = yValues.some(
+                (yVal: number) => Math.abs(yVal - value) < 0.01
+              );
+              return matchesDataValue ? formatYLabel(value) : "";
+            }}
+            style={{ marginRight: 10 }}
+          />
+
+          {/* Chart */}
+          <View style={{ flex: 1 }}>
+            <LineChart
+              style={{ flex: 1 }}
+              data={chartData}
+              contentInset={{ top: 20, bottom: 20, left: 20, right: 20 }}
+              svg={{
+                stroke: lineColor,
+                strokeWidth: 3,
+              }}
+              yMin={minY}
+              yMax={maxY}
+              xAccessor={({ item }: any) => item.x}
+              yAccessor={({ item }: any) => item.y}
+            >
+              <Grid
+                svg={{
+                  stroke: theme.colors.outline,
+                  strokeOpacity: 0.2,
+                }}
+                direction={Grid.Direction.HORIZONTAL}
+                ticks={yValues}
+              />
+            </LineChart>
+
+            {/* X Axis */}
+            <XAxis
+              data={xAxisData}
+              xAccessor={({ item }: any) => item.x}
+              formatLabel={(value: any, index: any) =>
+                xAxisData[index]?.label || ""
+              }
+              contentInset={{ left: 20, right: 20 }}
+              svg={{
+                fill: theme.colors.onSurface,
+                fontSize: 10,
+              }}
+              style={{ marginTop: 10 }}
+            />
+          </View>
         </View>
       </View>
-    </View>
+    </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   container: { marginVertical: 16, paddingBottom: 8 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 8},
-  segment: { width: 150 }
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
 });

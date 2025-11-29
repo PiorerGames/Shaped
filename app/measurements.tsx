@@ -1,8 +1,9 @@
 import { StyleSheet, View, ScrollView } from "react-native";
-import { Button, Text } from "react-native-paper";
+import { Button, Text, useTheme } from "react-native-paper";
 import { useEffect, useState } from "react";
 import AddMeasurementModal from "@/components/AddMeasurementModal";
 import MeasurementChart from "@/components/MeasurementChart";
+import MeasurementDetailsModal from "@/components/MeasurementDetailsModal";
 import { DATABASE_ID, databases, MEASUREMENTS_TABLE_ID } from "@/lib/appwrite";
 import { Query } from "react-native-appwrite";
 import { useAuth } from "@/lib/auth-context";
@@ -11,7 +12,10 @@ import { router, Stack } from "expo-router";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 export default function Measurements() {
+  const theme = useTheme();
   const [modalVisible, setModalVisible] = useState(false);
+  const [detailsVisible, setDetailsVisible] = useState(false);
+  const [selectedType, setSelectedType] = useState<string>("");
   const { user } = useAuth();
   const [measurements, setMeasurements] = useState<Measurement[]>([]);
 
@@ -32,57 +36,88 @@ export default function Measurements() {
     }
   };
 
-  const types = Array.from(new Set(measurements.map(m => m.type)));
+  const types = Array.from(new Set(measurements.map((m) => m.type)));
 
   return (
     <>
       <Stack.Screen options={{ headerShown: false }} />
-      <SafeAreaView style={styles.safeArea} edges={['top', 'left', 'right']}>
-        <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scroll}>
-        <View style={styles.header}>
-          <Button 
-            mode="text" 
-            onPress={() => router.back()}
-            icon="arrow-left"
-            style={styles.backButton}
-          >
-            Back
-          </Button>
-          <Text variant="headlineMedium" style={styles.title}>
-            Measurements
-          </Text>
-          <View style={{ width: 80 }} />
-        </View>
-
-        <Button 
-          mode="contained" 
-          onPress={() => setModalVisible(true)} 
-          style={styles.addButton}
-          contentStyle={styles.buttonContent}
-          icon="plus"
+      <SafeAreaView
+        style={[styles.safeArea, { backgroundColor: theme.colors.background }]}
+        edges={["top", "left", "right"]}
+      >
+        <View
+          style={[
+            styles.container,
+            { backgroundColor: theme.colors.background },
+          ]}
         >
-          Add Measurement
-        </Button>
+          <ScrollView contentContainerStyle={styles.scroll}>
+            <View style={styles.header}>
+              <Button
+                mode="text"
+                onPress={() => router.back()}
+                icon="arrow-left"
+                style={styles.backButton}
+              >
+                Back
+              </Button>
+              <Text variant="headlineMedium" style={styles.title}>
+                Measurements
+              </Text>
+              <View style={{ width: 80 }} />
+            </View>
 
-        {measurements.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Text style={styles.emptyText}>No measurements found. Create a new one!</Text>
-          </View>
-        ) : (
-          types.map((t) => (
-            <MeasurementChart key={t} measurements={measurements} type={t} />
-          ))
-        )}
+            <Button
+              mode="contained"
+              onPress={() => setModalVisible(true)}
+              style={styles.addButton}
+              contentStyle={styles.buttonContent}
+              icon="plus"
+            >
+              Add Measurement
+            </Button>
 
-        <AddMeasurementModal 
-          visible={modalVisible} 
-          onDismiss={() => setModalVisible(false)}
-          onMeasurementAdded={fetchMeasurements}
-        />
-      </ScrollView>
-    </View>
-    </SafeAreaView>
+            {measurements.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Text
+                  style={[
+                    styles.emptyText,
+                    { color: theme.colors.onSurfaceDisabled },
+                  ]}
+                >
+                  No measurements found. Create a new one!
+                </Text>
+              </View>
+            ) : (
+              types.map((t) => (
+                <MeasurementChart
+                  key={t}
+                  measurements={measurements}
+                  type={t}
+                  onPress={() => {
+                    setSelectedType(t);
+                    setDetailsVisible(true);
+                  }}
+                />
+              ))
+            )}
+
+            <AddMeasurementModal
+              visible={modalVisible}
+              onDismiss={() => setModalVisible(false)}
+              onMeasurementAdded={fetchMeasurements}
+            />
+
+            <MeasurementDetailsModal
+              visible={detailsVisible}
+              onDismiss={() => setDetailsVisible(false)}
+              measurements={measurements}
+              type={selectedType}
+              onRefresh={fetchMeasurements}
+            />
+          </ScrollView>
+        </View>
+      </SafeAreaView>
     </>
   );
 }
@@ -90,11 +125,9 @@ export default function Measurements() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: "#121212",
   },
   container: {
     flex: 1,
-    backgroundColor: "#121212",
   },
   scroll: {
     padding: 16,
@@ -125,7 +158,6 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   emptyText: {
-    color: "#999999",
     textAlign: "center",
   },
 });

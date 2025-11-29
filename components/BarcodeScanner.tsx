@@ -5,7 +5,7 @@ import {
   useCameraDevice,
   useCodeScanner,
 } from "react-native-vision-camera";
-import { Button } from "react-native-paper";
+import { Button, useTheme } from "react-native-paper";
 
 interface BarcodeScannerProps {
   onBarCodeScanned: (barcode: string) => void;
@@ -16,9 +16,11 @@ export default function BarcodeScanner({
   onBarCodeScanned,
   onClose,
 }: BarcodeScannerProps) {
+  const theme = useTheme();
   const [hasPermission, setHasPermission] = useState(false);
   const [isActive, setIsActive] = useState(true);
   const device = useCameraDevice("back");
+  const styles = createStyles(theme);
 
   useEffect(() => {
     (async () => {
@@ -48,8 +50,14 @@ export default function BarcodeScanner({
   if (!hasPermission) {
     return (
       <View style={styles.container}>
-        <Text style={styles.text}>Camera permission not granted</Text>
-        <Button mode="contained" onPress={onClose} style={styles.button}>
+        <Text style={styles.text}>Camera permission is required</Text>
+        <Button
+          mode="contained"
+          onPress={onClose}
+          style={styles.button}
+          buttonColor={theme.colors.primary}
+          textColor={theme.colors.onPrimary}
+        >
           Close
         </Button>
       </View>
@@ -60,7 +68,13 @@ export default function BarcodeScanner({
     return (
       <View style={styles.container}>
         <Text style={styles.text}>No camera device found</Text>
-        <Button mode="contained" onPress={onClose} style={styles.button}>
+        <Button
+          mode="contained"
+          onPress={onClose}
+          style={styles.button}
+          buttonColor={theme.colors.primary}
+          textColor={theme.colors.onPrimary}
+        >
           Close
         </Button>
       </View>
@@ -84,7 +98,13 @@ export default function BarcodeScanner({
         </View>
         <View style={styles.bottomOverlay}>
           <Text style={styles.instructionText}>Point camera at barcode</Text>
-          <Button mode="contained" onPress={onClose} style={styles.closeButton}>
+          <Button
+            mode="contained"
+            onPress={onClose}
+            style={styles.closeButton}
+            buttonColor={theme.colors.primary}
+            textColor={theme.colors.onPrimary}
+          >
             Cancel
           </Button>
         </View>
@@ -93,55 +113,56 @@ export default function BarcodeScanner({
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: "black",
-  },
-  text: {
-    color: "white",
-    fontSize: 18,
-    textAlign: "center",
-    padding: 20,
-  },
-  button: {
-    margin: 20,
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    justifyContent: "space-between",
-  },
-  topOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-  },
-  middleRow: {
-    flexDirection: "row",
-    height: 250,
-  },
-  sideOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-  },
-  scanArea: {
-    width: 300,
-    borderWidth: 2,
-    borderColor: "white",
-    backgroundColor: "transparent",
-  },
-  bottomOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0, 0, 0, 0.6)",
-    justifyContent: "center",
-    alignItems: "center",
-    paddingBottom: 40,
-  },
-  instructionText: {
-    color: "white",
-    fontSize: 16,
-    marginBottom: 20,
-  },
-  closeButton: {
-    minWidth: 120,
-  },
-});
+const createStyles = (theme: any) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      backgroundColor: "black",
+    },
+    text: {
+      color: "white",
+      fontSize: 18,
+      textAlign: "center",
+      padding: 20,
+    },
+    button: {
+      margin: 20,
+    },
+    overlay: {
+      ...StyleSheet.absoluteFillObject,
+      justifyContent: "space-between",
+    },
+    topOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+    },
+    middleRow: {
+      flexDirection: "row",
+      height: 250,
+    },
+    sideOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+    },
+    scanArea: {
+      width: 300,
+      borderWidth: 2,
+      borderColor: theme.colors.primary,
+      backgroundColor: "transparent",
+    },
+    bottomOverlay: {
+      flex: 1,
+      backgroundColor: "rgba(0, 0, 0, 0.6)",
+      justifyContent: "center",
+      alignItems: "center",
+      paddingBottom: 40,
+    },
+    instructionText: {
+      color: "white",
+      fontSize: 16,
+      marginBottom: 20,
+    },
+    closeButton: {
+      minWidth: 120,
+    },
+  });
